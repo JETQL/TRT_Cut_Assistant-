@@ -1,13 +1,8 @@
 import streamlit as st
 from itertools import combinations
 
-# -----------------------------
-# TRT Helper Functions
-# -----------------------------
-
 def to_seconds(t):
     parts = t.strip().split(":")
-
     if len(parts) == 4:
         h, m, s, f = map(int, parts)
     elif len(parts) == 3:
@@ -15,31 +10,18 @@ def to_seconds(t):
     else:
         h = 0
         m, s = map(int, parts)
-
     return h * 3600 + m * 60 + s
-
 
 def format_time(seconds):
     h = seconds // 3600
     m = (seconds % 3600) // 60
     s = seconds % 60
-
     return f"{h:02}:{m:02}:{s:02}:00"
-
-
-# -----------------------------
-# Page Setup
-# -----------------------------
 
 st.set_page_config(page_title="TRT Cut Assistant", layout="wide")
 
 st.title("TRT Cut Assistant")
-
 st.write("Upload a timing screenshot for reference, then paste segments below.")
-
-# -----------------------------
-# Screenshot Upload
-# -----------------------------
 
 uploaded_file = st.file_uploader(
     "Upload timing screenshot",
@@ -47,29 +29,11 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    st.image(
-        uploaded_file,
-        caption="Uploaded Timing Screenshot",
-        use_container_width=True
-    )
+    st.image(uploaded_file, caption="Uploaded Timing Screenshot", use_container_width=True)
+    st.info("Screenshot upload is for visual reference. Paste segment timings manually below.")
 
-    st.info(
-        "Screenshot upload is currently for visual reference. Paste the segment timings manually below."
-    )
-
-# -----------------------------
-# Inputs
-# -----------------------------
-
-current_trt = st.text_input(
-    "Current TRT",
-    "02:25:39:00"
-)
-
-target_trt = st.text_input(
-    "Target TRT",
-    "02:01:45:00"
-)
+current_trt = st.text_input("Current TRT", "02:25:39:00")
+target_trt = st.text_input("Target TRT", "02:01:45:00")
 
 desired_segments = st.number_input(
     "Desired Kept Segments",
@@ -77,10 +41,15 @@ desired_segments = st.number_input(
     value=14
 )
 
-prefer_under = st.checkbox(
-    "Prefer Staying Under TRT",
-    value=False
-)
+prefer_under = st.checkbox("Prefer Staying Under TRT", value=False)
+
+st.subheader("Protection Rules")
+
+protect_open = st.checkbox("Protect OPEN", value=True)
+protect_final = st.checkbox("Protect FINAL", value=True)
+protect_scoring = st.checkbox("Protect Scoring Segments", value=True)
+protect_t1st = st.checkbox("Protect T1ST", value=True)
+protect_b1st = st.checkbox("Protect B1ST", value=True)
 
 st.write("Paste segments in this format:")
 st.code("SEGMENT NAME, 00:05:32")
@@ -98,10 +67,6 @@ FINAL 6|0, 00:16:34""",
     height=250
 )
 
-# -----------------------------
-# Main Logic
-# -----------------------------
-
 if st.button("Find Best Cuts"):
 
     current_seconds = to_seconds(current_trt)
@@ -110,14 +75,20 @@ if st.button("Find Best Cuts"):
 
     segments = []
 
-    protected_keywords = [
-        "OPEN",
-        "FINAL",
-        "B1ST",
-        "T1ST"
-    ]
+    protected_keywords = []
 
-    # Parse Segment Data
+    if protect_open:
+        protected_keywords.append("OPEN")
+
+    if protect_final:
+        protected_keywords.append("FINAL")
+
+    if protect_t1st:
+        protected_keywords.append("T1ST")
+
+    if protect_b1st:
+        protected_keywords.append("B1ST")
+
     for line in segment_input.splitlines():
 
         if not line.strip():
@@ -128,10 +99,9 @@ if st.button("Find Best Cuts"):
 
             title_upper = title.upper()
 
-            # Automatic Protection Rules
             if any(keyword in title_upper for keyword in protected_keywords):
                 rule = "keep"
-            elif "|" in title_upper:
+            elif protect_scoring and "|" in title_upper:
                 rule = "keep"
             else:
                 rule = "cuttable"
@@ -150,12 +120,9 @@ if st.button("Find Best Cuts"):
     protected = [s for s in segments if s["rule"] == "keep"]
 
     total_segments = len(segments)
-
     results = []
 
-    # Brute Force Combinations
     for r in range(1, len(cuttable) + 1):
-
         for combo in combinations(cuttable, r):
 
             removed_seconds = sum(s["seconds"] for s in combo)
@@ -163,13 +130,9 @@ if st.button("Find Best Cuts"):
             diff = new_trt - target_seconds
             kept_segments = total_segments - r
 
-            # Scoring formula
             score = abs(diff)
-
-            # Segment count preference
             score += abs(kept_segments - desired_segments) * 30
 
-            # Prefer under target if selected
             if prefer_under and diff > 0:
                 score += 1000
 
@@ -184,10 +147,6 @@ if st.button("Find Best Cuts"):
 
     results = sorted(results, key=lambda x: x["score"])
 
-    # -----------------------------
-    # Display Results
-    # -----------------------------
-
     st.subheader("Results")
 
     st.write(f"Current TRT: **{format_time(current_seconds)}**")
@@ -199,12 +158,11 @@ if st.button("Find Best Cuts"):
     st.write(f"Cuttable Segments: **{len(cuttable)}**")
 
     if not results:
-        st.warning("No cut combinations found. Check your segment list.")
+        st.warning("No cut combinations found. Check your segment list or protection rules.")
     else:
         for i, result in enumerate(results[:5], start=1):
 
             st.markdown(f"## Option {i}")
-
             st.write(f"New TRT: **{format_time(result['new_trt'])}**")
 
             if result["diff"] > 0:
@@ -223,10 +181,6 @@ if st.button("Find Best Cuts"):
                 st.write(f"- {segment['title']} — {segment['duration']}")
 
             st.divider()
-
-    # -----------------------------
-    # Protected Segment List
-    # -----------------------------
 
     with st.expander("View Protected Segments"):
         for segment in protected:
