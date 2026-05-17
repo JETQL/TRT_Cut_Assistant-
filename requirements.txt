@@ -1,6 +1,5 @@
-streamlift
-pandas 
 streamlit
+pandas
 pytesseract
 pillow
 opencv-python
