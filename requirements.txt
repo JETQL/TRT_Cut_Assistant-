@@ -1,2 +1,6 @@
 streamlift
 pandas 
+streamlit
+pytesseract
+pillow
+opencv-python
