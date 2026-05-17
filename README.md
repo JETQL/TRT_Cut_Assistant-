@@ -1,9 +1,57 @@
 # TRT Cut Assistant
 
-A simple Streamlit dashboard that helps calculate which show segments to remove to hit a target TRT while respecting protected segments like open, final, scoring innings, and other required content.
+A Streamlit-based dashboard that helps media operations teams quickly determine which segments to remove in order to hit target TRT (Total Runtime) goals while respecting protected content rules.
 
-## Features
-- Enter current TRT and target TRT
-- Mark segments as keep, scoring, or cuttable
+Built for sports highlight and game recap workflows where certain innings, opens, finals, and scoring segments cannot be removed.
+
+---
+
+# Features
+
+## TRT Optimization
+- Calculates required time removal
 - Suggests best cut combinations
-- Helps target a desired segment count
+- Supports preferred segment counts
+- Supports “prefer under TRT” logic
+
+## Protected Segment Rules
+Automatically protects:
+- OPEN segments
+- FINAL segments
+- Scoring innings
+- T1ST
+- B1ST
+
+Users can toggle protections on/off directly in the dashboard.
+
+---
+
+# OCR Screenshot Support
+
+Upload screenshots of timing sheets directly into the dashboard.
+
+The app:
+- Displays uploaded timing screenshots
+- Uses OCR to extract timing text
+- Attempts to auto-detect segment durations
+- Allows manual correction before processing
+
+---
+
+# Tech Stack
+
+- Python
+- Streamlit
+- OpenCV
+- Tesseract OCR
+- Pillow
+- Pandas
+
+---
+
+# Installation
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
