@@ -1,5 +1,10 @@
 import streamlit as st
 from itertools import combinations
+import pytesseract
+from PIL import Image
+import cv2
+import numpy as np
+import re
 
 def to_seconds(t):
     parts = t.strip().split(":")
@@ -21,16 +26,54 @@ def format_time(seconds):
 st.set_page_config(page_title="TRT Cut Assistant", layout="wide")
 
 st.title("TRT Cut Assistant")
-st.write("Upload a timing screenshot for reference, then paste segments below.")
+st.write("Upload a timing screenshot, review OCR text, then run cut recommendations.")
 
 uploaded_file = st.file_uploader(
     "Upload timing screenshot",
     type=["png", "jpg", "jpeg"]
 )
 
+ocr_segments = ""
+
 if uploaded_file is not None:
-    st.image(uploaded_file, caption="Uploaded Timing Screenshot", use_container_width=True)
-    st.info("Screenshot upload is for visual reference. Paste segment timings manually below.")
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Uploaded Timing Screenshot", use_container_width=True)
+
+    try:
+        img_array = np.array(image)
+
+        if len(img_array.shape) == 3:
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img_array
+
+        text = pytesseract.image_to_string(gray)
+
+        st.subheader("OCR Extracted Text")
+        st.text(text)
+
+        detected_segments = []
+
+        lines = text.splitlines()
+
+        pattern = r"([A-Za-z0-9\|\(\)\/\s]+)\s+(\d{2}:\d{2}:\d{2})"
+
+        for line in lines:
+            match = re.search(pattern, line)
+            if match:
+                title = match.group(1).strip()
+                duration = match.group(2).strip()
+                detected_segments.append(f"{title}, {duration}")
+
+        if detected_segments:
+            ocr_segments = "\n".join(detected_segments)
+            st.success("Segments detected. Review/edit them below.")
+        else:
+            st.warning("OCR ran, but no clean segment timings were detected.")
+
+    except Exception as e:
+        st.warning("OCR could not run. You can still paste segment timings manually.")
+        st.write(e)
 
 current_trt = st.text_input("Current TRT", "02:25:39:00")
 target_trt = st.text_input("Target TRT", "02:01:45:00")
@@ -51,20 +94,22 @@ protect_scoring = st.checkbox("Protect Scoring Segments", value=True)
 protect_t1st = st.checkbox("Protect T1ST", value=True)
 protect_b1st = st.checkbox("Protect B1ST", value=True)
 
-st.write("Paste segments in this format:")
+st.write("Paste/edit segments in this format:")
 st.code("SEGMENT NAME, 00:05:32")
 
-segment_input = st.text_area(
-    "Segments",
-    """OPEN STL|ATH, 00:02:16
+default_segments = ocr_segments if ocr_segments else """OPEN STL|ATH, 00:02:16
 T1ST 0|0, 00:05:42
 B1ST 0|1, 00:06:49
 T2ND, 00:05:44
 B2ND, 00:08:08
 T3RD, 00:07:13
 B3RD, 00:06:20
-FINAL 6|0, 00:16:34""",
-    height=250
+FINAL 6|0, 00:16:34"""
+
+segment_input = st.text_area(
+    "Segments",
+    default_segments,
+    height=300
 )
 
 if st.button("Find Best Cuts"):
