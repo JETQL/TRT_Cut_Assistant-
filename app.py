@@ -1,7 +1,7 @@
 import streamlit as st
 from itertools import combinations
-import pytesseract
 from PIL import Image
+import pytesseract
 import re
 
 def to_seconds(t):
@@ -24,7 +24,7 @@ def format_time(seconds):
 st.set_page_config(page_title="TRT Cut Assistant", layout="wide")
 
 st.title("TRT Cut Assistant")
-st.write("Upload a timing screenshot, review OCR text, then paste or edit segments.")
+st.write("Upload a timing screenshot. OCR will draft the segment list, then you can review/edit before running cuts.")
 
 uploaded_file = st.file_uploader(
     "Upload timing screenshot",
@@ -35,40 +35,40 @@ ocr_segments = ""
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Timing Screenshot", use_container_width=True)
 
-    try:
-        image_gray = image.convert("L")
-        ocr_text = pytesseract.image_to_string(image_gray)
+    st.image(
+        image,
+        caption="Uploaded Timing Screenshot",
+        use_container_width=True
+    )
 
-        st.subheader("OCR RAW TEXT")
+    st.info("OCR will try to create a draft segment list. Review and fix the segment list before running cuts.")
+
+    gray_image = image.convert("L")
+    ocr_text = pytesseract.image_to_string(gray_image)
+
+    with st.expander("View OCR Raw Text"):
         st.text(ocr_text)
 
-        detected_segments = []
+    detected_segments = []
 
-        for line in ocr_text.splitlines():
-            # Looks for text followed by duration like 00:05:32 or 00:05:32:00
-            match = re.search(
-                r"([A-Za-z0-9\|\(\)\/\s]+?)\s+(\d{2}:\d{2}:\d{2}(?::\d{2})?)",
-                line
-            )
+    for line in ocr_text.splitlines():
+        match = re.search(
+            r"(.+?)\s+(\d{2}:\d{2}:\d{2}(?::\d{2})?)",
+            line
+        )
 
-            if match:
-                title = match.group(1).strip()
-                duration = match.group(2).strip()
+        if match:
+            title = match.group(1).strip()
+            duration = match.group(2).strip()
 
-                if title and duration:
-                    detected_segments.append(f"{title}, {duration}")
+            detected_segments.append(f"{title}, {duration}")
 
-        if detected_segments:
-            ocr_segments = "\n".join(detected_segments)
-            st.success("OCR found possible segments. Review/edit below.")
-        else:
-            st.warning("OCR did not auto-detect segment lines. Use the RAW TEXT above as reference and paste manually.")
-
-    except Exception as e:
-        st.warning("OCR could not run. You can still paste segment timings manually.")
-        st.write(e)
+    if detected_segments:
+        ocr_segments = "\n".join(detected_segments)
+        st.success("OCR found possible segment timings. Review/edit them below.")
+    else:
+        st.warning("OCR did not find clean segment timings. You can still paste them manually.")
 
 current_trt = st.text_input("Current TRT", "02:25:39:00")
 target_trt = st.text_input("Target TRT", "02:01:45:00")
@@ -82,7 +82,6 @@ desired_segments = st.number_input(
 prefer_under = st.checkbox("Prefer Staying Under TRT", value=False)
 
 st.subheader("Protection Rules")
-
 protect_open = st.checkbox("Protect OPEN", value=True)
 protect_final = st.checkbox("Protect FINAL", value=True)
 protect_scoring = st.checkbox("Protect Scoring Segments", value=True)
@@ -115,19 +114,12 @@ if st.button("Find Best Cuts"):
 
     segments = []
 
-    protected_keywords = []
-
-    if protect_open:
-        protected_keywords.append("OPEN")
-
-    if protect_final:
-        protected_keywords.append("FINAL")
-
-    if protect_t1st:
-        protected_keywords.append("T1ST")
-
-    if protect_b1st:
-        protected_keywords.append("B1ST")
+    protected_keywords = [
+        "OPEN",
+        "FINAL",
+        "B1ST",
+        "T1ST"
+    ]
 
     for line in segment_input.splitlines():
 
@@ -139,7 +131,18 @@ if st.button("Find Best Cuts"):
 
             title_upper = title.upper()
 
-            if any(keyword in title_upper for keyword in protected_keywords):
+            active_protected_keywords = []
+
+            if protect_open:
+                active_protected_keywords.append("OPEN")
+            if protect_final:
+                active_protected_keywords.append("FINAL")
+            if protect_b1st:
+                active_protected_keywords.append("B1ST")
+            if protect_t1st:
+                active_protected_keywords.append("T1ST")
+
+            if any(keyword in title_upper for keyword in active_protected_keywords):
                 rule = "keep"
             elif protect_scoring and "|" in title_upper:
                 rule = "keep"
@@ -153,7 +156,7 @@ if st.button("Find Best Cuts"):
                 "rule": rule
             })
 
-        except:
+        except Exception:
             st.error(f"Problem reading line: {line}")
 
     cuttable = [s for s in segments if s["rule"] == "cuttable"]
@@ -198,10 +201,9 @@ if st.button("Find Best Cuts"):
     st.write(f"Cuttable Segments: **{len(cuttable)}**")
 
     if not results:
-        st.warning("No cut combinations found. Check your segment list.")
+        st.warning("No cut combinations found. Check your segment list or protection rules.")
     else:
         for i, result in enumerate(results[:5], start=1):
-
             st.markdown(f"## Option {i}")
             st.write(f"New TRT: **{format_time(result['new_trt'])}**")
 
@@ -216,7 +218,6 @@ if st.button("Find Best Cuts"):
             st.write(f"Time Removed: **{format_time(result['removed'])}**")
 
             st.write("Suggested Cuts:")
-
             for segment in result["combo"]:
                 st.write(f"- {segment['title']} — {segment['duration']}")
 
